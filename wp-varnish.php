@@ -99,23 +99,8 @@ class WPVarnish {
     // that do not need purging.
     
     // When a post or custom post type is published, or if it is edited and its status is "published".
-    add_action('publish_post', array($this, 'WPVarnishPurgePost'), 99);
-    add_action('publish_post', array($this, 'WPVarnishPurgeCommonObjects'), 99);
-    // When a page is published, or if it is edited and its status is "published".
-    add_action('publish_page', array($this, 'WPVarnishPurgePost'), 99);
-    add_action('publish_page', array($this, 'WPVarnishPurgeCommonObjects'), 99);
-    // When an attachment is updated.
-    add_action('edit_attachment', array($this, 'WPVarnishPurgePost'), 99);
-    add_action('edit_attachment', array($this, 'WPVarnishPurgeCommonObjects'), 99);
-    // Runs just after a post is added via email.
-    add_action('publish_phone', array($this, 'WPVarnishPurgePost'), 99);
-    add_action('publish_phone', array($this, 'WPVarnishPurgeCommonObjects'), 99);
-    // Runs when a post is published via XMLRPC request, or if it is edited via XMLRPC and its status is "published".
-    add_action('xmlrpc_publish_post', array($this, 'WPVarnishPurgePost'), 99);
-    add_action('xmlrpc_publish_post', array($this, 'WPVarnishPurgeCommonObjects'), 99);
-    // Runs when a future post or page is published.
-    add_action('publish_future_post', array($this, 'WPVarnishPurgePost'), 99);
-    add_action('publish_future_post', array($this, 'WPVarnishPurgeCommonObjects'), 99);
+    add_action('edit_post', array($this, 'WPVarnishPurgePost'), 99);
+    add_action('edit_post', array($this, 'WPVarnishPurgeCommonObjects'), 99);
     // When post status is changed
     add_action('transition_post_status', array($this, 'WPVarnishPurgePostStatus'), 99, 3);
     add_action('transition_post_status', array($this, 'WPVarnishPurgeCommonObjectsStatus'), 99, 3);
@@ -167,40 +152,48 @@ class WPVarnish {
     }
 
     // Purge related objects
-    function WPVarnishPurgeCommonObjects($post_id) {
-
+    function WPVarnishPurgeCommonObjects($post_id)
+    {
         $post = get_post($post_id);
+
         // We need a post object in order to generate the archive URLs which are
         // related to the post. We perform a few checks to make sure we have a
         // post object.
-        if ( ! is_object($post) || ! isset($post->post_type) || ! in_array( get_post_type($post), array('post') ) ) {
+        if (!is_object($post) || !isset($post->post_type) || in_array(get_post_type($post), array('page', 'attachment', 'revision', 'nav_menu_item'))) {
             // Do nothing for pages, attachments.
             return;
         }
-        
-        // NOTE: Policy for archive purging
-        // By default, only the first page of the archives is purged. If
-        // 'wpv_update_pagenavi_optname' is checked, then all the pages of each
-        // archive are purged.
-        if ( get_option($this->wpv_update_pagenavi_optname) == 1 ) {
-            // Purge all pages of the archive.
-            $archive_pattern = '(?:page/[\d]+/)?$';
-        } else {
-            // Only first page of the archive is purged.
-            $archive_pattern = '$';
-        }
 
+        // Policy for archive purging
+        // --------------------------
+        // By default, only the first page and the feeds of the archives are
+        // purged. If ``wpv_update_pagenavi_optname`` is checked, then all the
+        // pages of each archive are purged as well.
+
+        // Pattern for archive feeds
+        $archive_feed_pattern = '(?:feed/(?:(atom|rdf)/)?)?$';
+        // Pattern for archive page
+        $archive_page_pattern = '(?:page/[\d]+/)?$';
+        // Determine full pattern
+        if (get_option($this->wpv_update_pagenavi_optname) == 1) {
+            // Purge all pages of the archive and its feed.
+            $archive_pattern = sprintf('(%s|%s|$)', $archive_feed_pattern, $archive_page_pattern);
+        }
+        else {
+            // Only first page of the archive and its feed are purged.
+            $archive_pattern = $archive_feed_pattern;
+        }
         // Front page (latest posts OR static front page)
-        $this->WPVarnishPurgeObject( '/' . $archive_pattern );
+        $this->WPVarnishPurgeObject('/' . $archive_pattern);
+
+        // Feeds (ALREADY COVERED BY FRONT PAGE)
+        //$this->WPVarnishPurgeObject( '/feed/(?:(atom|rdf)/)?$' );
 
         // Static Posts page (Added only if a static page used as the 'posts page')
-        if ( get_option('show_on_front', 'posts') == 'page' && intval(get_option('page_for_posts', 0)) > 0 ) {
-            $posts_page_url = preg_replace( '#^https?://[^/]+#i', '', get_permalink(intval(get_option('page_for_posts'))) );
-            $this->WPVarnishPurgeObject( $posts_page_url . $archive_pattern );
+        if (get_option('show_on_front', 'posts') == 'page' && intval(get_option('page_for_posts', 0)) > 0) {
+            $posts_page_url = get_permalink(intval(get_option('page_for_posts')));
+            $this->WPVarnishPurgeObject($posts_page_url . $archive_pattern);
         }
-
-        // Feeds
-        $this->WPVarnishPurgeObject( '/feed/(?:(atom|rdf)/)?$' );
 
         // Category, Tag, Author and Date Archives
 
@@ -209,49 +202,67 @@ class WPVarnish {
 
         // Category Archive
         $category_slugs = array();
-        foreach( get_the_category($post->ID) as $cat ) {
-            $category_slugs[] = $cat->slug;
+        $categories = get_the_category($post->ID);
+        if (!empty($categories)) {
+            foreach ($categories as $cat) {
+                $category_slugs[] = $cat->slug;
+            }
         }
-        if ( ! empty($category_slugs) ) {
-            if ( count($category_slugs) > 1 ) {
+        if (!empty($category_slugs)) {
+            if (count($category_slugs) > 1) {
                 $cat_slug_pattern = '(' . implode('|', $category_slugs) . ')';
-            } else {
+            }
+            else {
                 $cat_slug_pattern = implode('', $category_slugs);
             }
-            $this->WPVarnishPurgeObject( '/' . get_option('category_base', 'category') . '/' . $cat_slug_pattern . '/' . $archive_pattern );
+            $cat_base = get_option('category_base');
+            if (empty($cat_base)) {
+                $cat_base = 'category';
+            }
+            $this->WPVarnishPurgeObject('/' . $cat_base . '/' . $cat_slug_pattern . '/' . $archive_pattern);
         }
 
         // Tag Archive
         $tag_slugs = array();
-        foreach( get_the_tags($post->ID) as $tag ) {
-            $tag_slugs[] = $tag->slug;
+        $tags = get_the_tags($post->ID);
+        if (!empty($tags)) {
+            foreach ($tags as $tag) {
+                $tag_slugs[] = $tag->slug;
+            }
         }
-        if ( ! empty($tag_slugs) ) {
-            if ( count($tag_slugs) > 1 ) {
+        if (!empty($tag_slugs)) {
+            if (count($tag_slugs) > 1) {
                 $tag_slug_pattern = '(' . implode('|', $tag_slugs) . ')';
-            } else {
+            }
+            else {
                 $tag_slug_pattern = implode('', $tag_slugs);
             }
-            $this->WPVarnishPurgeObject( '/' . get_option('tag_base', 'tag') . '/' . $tag_slug_pattern . '/' . $archive_pattern );
+            $tag_base = get_option('tag_base');
+            if (empty($tag_base)) {
+                $tag_base = 'tag';
+            }
+            $this->WPVarnishPurgeObject('/' . $tag_base . '/' . $tag_slug_pattern . '/' . $archive_pattern);
         }
 
         // Author Archive
-        $author_archive_url = preg_replace('#^https?://[^/]+#i', '', get_author_posts_url($post->post_author) );
-        $this->WPVarnishPurgeObject( $author_archive_url . $archive_pattern );
+        $this->WPVarnishPurgeObject(get_author_posts_url($post->post_author) . $archive_pattern);
 
         // Date based archives
         $archive_year = mysql2date('Y', $post->post_date);
         $archive_month = mysql2date('m', $post->post_date);
         $archive_day = mysql2date('d', $post->post_date);
         // Yearly Archive
-        $archive_year_url = preg_replace('#^https?://[^/]+#i', '', get_year_link( $archive_year ) );
-        $this->WPVarnishPurgeObject( $archive_year_url . $archive_pattern );
+        $this->WPVarnishPurgeObject(get_year_link($archive_year) . $archive_pattern);
         // Monthly Archive
-        $archive_month_url = preg_replace('#^https?://[^/]+#i', '', get_month_link( $archive_year, $archive_month ) );
-        $this->WPVarnishPurgeObject( $archive_month_url . $archive_pattern );
+        $this->WPVarnishPurgeObject(get_month_link($archive_year, $archive_month) . $archive_pattern);
         // Daily Archive
-        $archive_day_url = preg_replace('#^https?://[^/]+#i', '', get_day_link( $archive_year, $archive_month, $archive_day ) );
-        $this->WPVarnishPurgeObject( $archive_day_url . $archive_pattern );
+        $this->WPVarnishPurgeObject(get_day_link($archive_year, $archive_month, $archive_day) . $archive_pattern);
+
+        // Sitemap
+        $this->WPVarnishPurgeObject('/(sitemap(_index)?\.xml(\.gz)?|[a-z0-9_\-]+-sitemap([0-9]+)?\.xml(\.gz)?)$');
+        // Also consider these shorter patterns, which btw do not cover all cases:
+        // ([a-z0-9_\-]*?)sitemap([a-z0-9_\-]*)?\.xml(\.gz)?
+        // sitemap\.xml\.gz
     }
 
     //wrapper on WPVarnishPurgePost for transition_post_status
