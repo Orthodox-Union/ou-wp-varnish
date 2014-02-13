@@ -310,7 +310,7 @@ class WPVarnish {
 
         $post = get_post($post_id);
         // We need a post object, so we perform a few checks.
-        if ( ! is_object($post) || ! isset($post->post_type) || ! in_array( get_post_type($post), array('post', 'page', 'attachment') ) ) {
+        if (!is_object($post) || !isset($post->post_type) || in_array(get_post_type($post), array('nav_menu_item', 'revision', 'acf'))) {
             return;
         }
 
@@ -635,7 +635,8 @@ function WPVarnishPostID() {
     $wpv_replace_wpurl = '/^https?:\/\/([^\/]+)(.*)/i';
     $wpv_host = preg_replace($wpv_replace_wpurl, "$1", $wpv_wpurl);
     $wpv_blogaddr = preg_replace($wpv_replace_wpurl, "$2", $wpv_wpurl);
-    $wpv_url = $wpv_blogaddr . $wpv_url;
+    // this breaks urls
+    // $wpv_url = $wpv_blogaddr . $wpv_url;
 
     for ($i = 0; $i < count ($wpv_purgeaddr); $i++) {
       $varnish_sock = fsockopen($wpv_purgeaddr[$i], $wpv_purgeport[$i], $errno, $errstr, $wpv_timeout);
