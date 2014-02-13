@@ -1,0 +1,6 @@
+{
+    "name" : "Orthodox-Union/ou-wp-varnish",
+    "description" : "OU Wordpress Varnish",
+    "type" : "wordpress-plugin",
+    "version" : "0.8"
+}
