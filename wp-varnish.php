@@ -195,6 +195,37 @@ class WPVarnish {
             $this->WPVarnishPurgeObject($posts_page_url . $archive_pattern);
         }
 
+        // Check series
+        $current_post_type = get_post_type_object(get_post_type($post));
+        if ((true == $current_post_type->has_archive) && (!empty($current_post_type->query_var)) && (!empty($current_post_type->labels->name))) {
+            $this->WPVarnishPurgeObject(get_bloginfo('url') . '/' . $current_post_type->query_var . '/');
+        }
+
+        $current_available_taxonomies = get_object_taxonomies(get_post_type($post));
+        $current_assigned_terms = wp_get_object_terms($post_id, $current_available_taxonomies);
+
+        if (!empty($current_assigned_terms)) {
+            $target_term = '';
+            foreach ($current_assigned_terms as $term) {
+                // If there's already a target term, break free of foreach
+                if (!empty($target_term)) break;
+
+                // If taxonomy is 'categories' - this is the target term
+                if ('categories' == $term->taxonomy) $target_term = $term;
+
+                // If taxonomy has 'series' at its end - this is the target term
+                if ('series' == substr( $term->taxonomy, -6)) {
+                    $target_term = $term;
+                }
+            }
+            unset($term);
+        }
+        unset($current_assigned_terms, $current_available_taxonomies);
+
+        if (!empty($target_term)) {
+            $this->WPVarnishPurgeObject(get_term_link($target_term, $target_term->taxonomy) . '/');
+        }
+
         // Category, Tag, Author and Date Archives
 
         // We get the URLs of the category and tag archives, only for
