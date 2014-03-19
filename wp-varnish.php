@@ -116,7 +116,7 @@ class WPVarnish {
     add_action('trashed_comment', array($this, 'WPVarnishPurgePostComments'),99);
     add_action('pingback_post', array($this, 'WPVarnishPurgePostComments'),99);
     add_action('trackback_post', array($this, 'WPVarnishPurgePostComments'),99);
-    add_action('wp_set_comment_status', array($this, 'WPVarnishPurgePostCommentsStatus'),99);
+    add_action('wp_set_comment_status', array($this, 'WPVarnishPurgePostCommentsStatus'), 99, 2);
 
     // When Theme is changed, Thanks dupuis
     add_action('switch_theme',array($this, 'WPVarnishPurgeAll'), 99);
