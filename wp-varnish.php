@@ -410,7 +410,7 @@ function WPVarnishPostID() {
 
   function WPVarnishAdminMenu() {
     if (!defined('VARNISH_HIDE_ADMINMENU')) {
-      add_options_page(__('WP-Varnish Configuration','wp-varnish'), 'WP-Varnish', 1, 'WPVarnish', array($this, 'WPVarnishAdmin'));
+      add_options_page(__('WP-Varnish Configuration','wp-varnish'), 'WP-Varnish', 'manage_options', 'WPVarnish', array($this, 'WPVarnishAdmin'));
     }
   }
 
