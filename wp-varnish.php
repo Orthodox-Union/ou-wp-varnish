@@ -635,6 +635,10 @@ function WPVarnishPostID() {
     $wpv_replace_wpurl = '/^https?:\/\/([^\/]+)(.*)/i';
     $wpv_host = preg_replace($wpv_replace_wpurl, "$1", $wpv_wpurl);
     $wpv_blogaddr = preg_replace($wpv_replace_wpurl, "$2", $wpv_wpurl);
+
+    // fix: strip protocol and host from url
+    $wpv_url = preg_replace($wpv_replace_wpurl, '$2', $wpv_url);
+
     // this breaks urls
     // $wpv_url = $wpv_blogaddr . $wpv_url;
 
